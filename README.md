@@ -2,6 +2,8 @@
 
 Type a passage of French literature, then get a mini lesson on it.
 
+> **Coming next:** Plume is growing into a web app and an iOS/Android app with accounts, your own uploaded books, and a full typing-test experience. The plan lives in [`specs/`](specs/README.md); start there. This README covers the current Python CLI.
+
 `plume` picks a random passage from a classic French novel (Flaubert, Hugo, Zola, Verne, Dumas, Voltaire, Proust, and more, via Project Gutenberg). You type it out, see which words and accents you got right, and Claude gives you a short lesson: an English translation, key vocabulary, a grammar point from the passage, context on the book, and tips on your typing mistakes. Ask follow-up questions as long as you like.
 
 ## Setup
@@ -31,6 +33,8 @@ plume --history                # choose a past session to reopen
 plume --voices                 # list installed French voices
 plume --voice amélie           # pick a voice for listening
 ```
+
+While a passage is showing, type `/s` (or `/skip`) to skip it and get a different one.
 
 After the lesson, type a question to ask Claude about the passage, press Enter for the next passage, or type `q` to quit.
 
