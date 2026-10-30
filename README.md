@@ -28,9 +28,17 @@ plume --book verne             # only books whose title or author matches
 plume --list                   # list all books
 plume --resume                 # reopen your most recent session
 plume --history                # choose a past session to reopen
+plume --voices                 # list installed French voices
+plume --voice amélie           # pick a voice for listening
 ```
 
 After the lesson, type a question to ask Claude about the passage, press Enter for the next passage, or type `q` to quit.
+
+## Listening
+
+At any prompt, type `/l` to hear the passage read aloud, or `/slow` to hear it slowly. Type the same command again to stop. Listening uses the macOS `say` command and picks your best French voice automatically: Premium, then Enhanced, then the rest. Install better voices in System Settings → Accessibility → Spoken Content → System Voice → Manage Voices.
+
+## Notes
 
 Typing is relaxed about French typography: `'` matches `’`, `oe` matches `œ`, and quotes and dashes are optional. Accents count.
 

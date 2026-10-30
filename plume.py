@@ -311,6 +311,79 @@ def teach(messages: list[dict], status: str) -> str:
     return text
 
 
+# ---------- listening ----------
+
+NOVELTY_VOICES = {"Eddy", "Flo", "Grandma", "Grandpa", "Jacques", "Reed", "Rocko", "Sandy", "Shelley"}
+voice: str | None = None
+player: subprocess.Popen | None = None
+
+
+def french_voices() -> list[tuple[str, str]]:
+    """Installed French voices as (name, locale), best first."""
+    if not shutil.which("say"):
+        return []
+    out = subprocess.run(["say", "-v", "?"], capture_output=True, text=True).stdout
+    found = []
+    for line in out.splitlines():
+        m = re.match(r"(.+?)\s+(fr_[A-Z]{2})\s+#", line)
+        if m and m.groups() not in found:
+            found.append(m.groups())
+
+    def rank(v):
+        name, locale = v
+        quality = 3 if "Premium" in name else 2 if "Enhanced" in name else 0 if name.split()[0] in NOVELTY_VOICES else 1
+        return (-quality, locale != "fr_FR", name)
+
+    return sorted(found, key=rank)
+
+
+def choose_voice(wanted: str | None) -> str | None:
+    voices = french_voices()
+    if not wanted:
+        return voices[0][0] if voices else None
+    for name, _ in voices:
+        if strip_accents(name.lower()).startswith(strip_accents(wanted.lower())):
+            return name
+    sys.exit(f"No French voice matches “{wanted}”. Try `plume --voices`.")
+
+
+def stop_speaking():
+    global player
+    if player and player.poll() is None:
+        player.terminate()
+    player = None
+
+
+def speak(text: str, slow: bool = False):
+    """Read text aloud in the background. The same command again while it plays stops it."""
+    global player
+    if player and player.poll() is None:
+        same = ("-r" in player.args) == slow
+        stop_speaking()
+        if same:
+            console.print("[dim]Stopped.[/]")
+            return
+    if not voice:
+        console.print("[yellow]No French voice found. Listening needs macOS and a French voice.[/]")
+        return
+    cmd = ["say", "-v", voice] + (["-r", "110"] if slow else []) + [text]
+    player = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    console.print(f"[dim]🔊 {voice}{', slowly' if slow else ''} — {'/slow' if slow else '/l'} again to stop[/]")
+
+
+def ask(prompt: str, passage: str) -> str:
+    """input() that handles /l and /slow, returning the first other line typed."""
+    while True:
+        line = input(prompt)
+        command = line.strip().lower()
+        if command in ("/l", "/listen"):
+            speak(passage)
+        elif command == "/slow":
+            speak(passage, slow=True)
+        else:
+            return line
+
+
 # ---------- sessions ----------
 
 def save_session(session: dict):
@@ -364,7 +437,8 @@ def converse(session: dict) -> bool:
     messages = session["messages"]
     while True:
         console.print()
-        question = input("Ask a question, Enter for the next passage, q to quit › ").strip()
+        question = ask("Ask a question, Enter for the next passage, q to quit › ", session["passage"]).strip()
+        stop_speaking()
         if not question:
             return False
         if question.lower() == "q":
@@ -378,10 +452,15 @@ def converse(session: dict) -> bool:
 def round_(args) -> bool:
     book, passage = pick_passage(args.size, args.book)
     show_passage(book, passage)
-    console.print("[dim]Type the passage, then press Enter.[/]")
-    start = time.monotonic()
-    typed = input("› ")
+    console.print("[dim]Type the passage, then press Enter.  /l to listen · /slow to listen slowly[/]")
+    while True:
+        start = time.monotonic()
+        typed = input("› ")
+        if typed.strip().lower() not in ("/l", "/listen", "/slow"):
+            break
+        speak(passage, slow=typed.strip().lower() == "/slow")
     seconds = time.monotonic() - start
+    stop_speaking()
     console.print()
     result = compare(passage, typed)
     show_result(result, seconds, typed)
@@ -414,12 +493,21 @@ def main():
     ap.add_argument("--list", action="store_true", help="list the books and exit")
     ap.add_argument("--resume", action="store_true", help="reopen your most recent session")
     ap.add_argument("--history", action="store_true", help="choose a past session to reopen")
+    ap.add_argument("--voice", help="French voice for /l, e.g. 'amélie' (default: best installed)")
+    ap.add_argument("--voices", action="store_true", help="list installed French voices and exit")
     args = ap.parse_args()
 
     if args.list:
         for _, title, author in BOOKS:
             console.print(f"[italic]{title}[/] — {author}")
         return
+    if args.voices:
+        for i, (name, locale) in enumerate(french_voices()):
+            console.print(f"{name}  [dim]{locale}{'  (default)' if i == 0 else ''}[/]")
+        return
+
+    global voice
+    voice = choose_voice(args.voice)
 
     try:
         quit_ = False
@@ -430,6 +518,7 @@ def main():
             quit_ = round_(args)
     except (KeyboardInterrupt, EOFError):
         pass
+    stop_speaking()
     console.print("\n[magenta]À bientôt ![/]")
 
 
