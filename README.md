@@ -26,10 +26,14 @@ plume --level "beginner (A2)"  # tune the lesson to your level
 plume --size short             # short / medium / long passages
 plume --book verne             # only books whose title or author matches
 plume --list                   # list all books
+plume --resume                 # reopen your most recent session
+plume --history                # choose a past session to reopen
 ```
 
 After the lesson, type a question to ask Claude about the passage, press Enter for the next passage, or type `q` to quit.
 
 Typing is relaxed about French typography: `'` matches `’`, `oe` matches `œ`, and quotes and dashes are optional. Accents count.
 
-Books are cached in `~/.cache/plume/`.
+Every session (passage, typing result, lesson, and questions) is saved automatically. Resuming one shows the passage and last answer again so you can keep asking questions.
+
+Books and sessions are stored in `~/.cache/plume/`.

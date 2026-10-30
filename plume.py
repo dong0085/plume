@@ -49,6 +49,7 @@ BOOKS = [
 
 SIZES = {"short": (100, 200), "medium": (200, 350), "long": (350, 550)}
 CACHE = Path.home() / ".cache" / "plume"
+SESSIONS = CACHE / "sessions"
 MODEL = "claude-opus-5-5"
 
 console = Console()
@@ -310,10 +311,45 @@ def teach(messages: list[dict], status: str) -> str:
     return text
 
 
+# ---------- sessions ----------
+
+def save_session(session: dict):
+    SESSIONS.mkdir(parents=True, exist_ok=True)
+    (SESSIONS / f"{session['id']}.json").write_text(json.dumps(session, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def load_sessions() -> list[dict]:
+    files = sorted(SESSIONS.glob("*.json"), reverse=True) if SESSIONS.exists() else []
+    return [json.loads(f.read_text(encoding="utf-8")) for f in files]
+
+
+def latest_session() -> dict:
+    sessions = load_sessions()
+    if not sessions:
+        sys.exit("No saved sessions yet. Run `plume` to start one.")
+    return sessions[0]
+
+
+def pick_session() -> dict | None:
+    sessions = load_sessions()[:20]
+    if not sessions:
+        sys.exit("No saved sessions yet. Run `plume` to start one.")
+    for i, s in enumerate(sessions, 1):
+        when = time.strftime("%b %d %H:%M", time.localtime(int(s["id"].split("-")[0])))
+        questions = len(s["messages"]) // 2 - 1
+        console.print(
+            f"[cyan]{i:>2}[/]  {when}  [italic]{s['book'][1]}[/]  "
+            f"[dim]{s['passage'][:45]}…  ({questions} question{'s' if questions != 1 else ''})[/]"
+        )
+    choice = input("\nResume which session? [number, Enter to cancel] ").strip()
+    if choice.isdigit() and 1 <= int(choice) <= len(sessions):
+        return sessions[int(choice) - 1]
+    return None
+
+
 # ---------- main loop ----------
 
-def round_(args):
-    book, passage = pick_passage(args.size, args.book)
+def show_passage(book, passage):
     console.print()
     console.print(Panel(
         Text(passage, style="bold"),
@@ -321,17 +357,11 @@ def round_(args):
         border_style="magenta",
         padding=(1, 2),
     ))
-    console.print("[dim]Type the passage, then press Enter.[/]")
-    start = time.monotonic()
-    typed = input("› ")
-    seconds = time.monotonic() - start
-    console.print()
-    result = compare(passage, typed)
-    show_result(result, seconds, typed)
-    messages = [{"role": "user", "content": lesson_prompt(book, passage, result, args.level)}]
-    messages.append({"role": "assistant", "content": teach(messages, "Preparing your lesson…")})
 
-    # Follow-up questions until the learner moves on. Returns True to quit.
+
+def converse(session: dict) -> bool:
+    """Follow-up questions until the learner moves on. Returns True to quit."""
+    messages = session["messages"]
     while True:
         console.print()
         question = input("Ask a question, Enter for the next passage, q to quit › ").strip()
@@ -342,6 +372,38 @@ def round_(args):
         console.print()
         messages.append({"role": "user", "content": question})
         messages.append({"role": "assistant", "content": teach(messages, "Thinking…")})
+        save_session(session)
+
+
+def round_(args) -> bool:
+    book, passage = pick_passage(args.size, args.book)
+    show_passage(book, passage)
+    console.print("[dim]Type the passage, then press Enter.[/]")
+    start = time.monotonic()
+    typed = input("› ")
+    seconds = time.monotonic() - start
+    console.print()
+    result = compare(passage, typed)
+    show_result(result, seconds, typed)
+    session = {
+        "id": f"{int(time.time())}-{book[0]}",
+        "book": list(book),
+        "passage": passage,
+        "typed": typed,
+        "seconds": seconds,
+        "result": result,
+        "messages": [{"role": "user", "content": lesson_prompt(book, passage, result, args.level)}],
+    }
+    session["messages"].append({"role": "assistant", "content": teach(session["messages"], "Preparing your lesson…")})
+    save_session(session)
+    return converse(session)
+
+
+def resume(session: dict) -> bool:
+    show_passage(session["book"], session["passage"])
+    show_result(session["result"], session["seconds"], session["typed"])
+    console.print(Markdown(session["messages"][-1]["content"]))
+    return converse(session)
 
 
 def main():
@@ -350,6 +412,8 @@ def main():
     ap.add_argument("--size", choices=SIZES, default="medium", help="passage length")
     ap.add_argument("--book", help="only use books whose title or author contains this text")
     ap.add_argument("--list", action="store_true", help="list the books and exit")
+    ap.add_argument("--resume", action="store_true", help="reopen your most recent session")
+    ap.add_argument("--history", action="store_true", help="choose a past session to reopen")
     args = ap.parse_args()
 
     if args.list:
@@ -358,8 +422,12 @@ def main():
         return
 
     try:
-        while not round_(args):
-            pass
+        quit_ = False
+        if args.history or args.resume:
+            session = pick_session() if args.history else latest_session()
+            quit_ = session is None or resume(session)
+        while not quit_:
+            quit_ = round_(args)
     except (KeyboardInterrupt, EOFError):
         pass
     console.print("\n[magenta]À bientôt ![/]")
