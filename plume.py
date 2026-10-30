@@ -450,17 +450,22 @@ def converse(session: dict) -> bool:
 
 
 def round_(args) -> bool:
-    book, passage = pick_passage(args.size, args.book)
-    show_passage(book, passage)
-    console.print("[dim]Type the passage, then press Enter.  /l to listen · /slow to listen slowly[/]")
     while True:
-        start = time.monotonic()
-        typed = input("› ")
-        if typed.strip().lower() not in ("/l", "/listen", "/slow"):
+        book, passage = pick_passage(args.size, args.book)
+        show_passage(book, passage)
+        console.print("[dim]Type the passage, then press Enter.  /l to listen · /slow to listen slowly · /s to skip[/]")
+        while True:
+            start = time.monotonic()
+            typed = input("› ")
+            command = typed.strip().lower()
+            if command not in ("/l", "/listen", "/slow"):
+                break
+            speak(passage, slow=command == "/slow")
+        seconds = time.monotonic() - start
+        stop_speaking()
+        if command not in ("/s", "/skip"):
             break
-        speak(passage, slow=typed.strip().lower() == "/slow")
-    seconds = time.monotonic() - start
-    stop_speaking()
+        console.print("[dim]Skipped. Here's another one.[/]")
     console.print()
     result = compare(passage, typed)
     show_result(result, seconds, typed)
